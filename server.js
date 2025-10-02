@@ -76,7 +76,6 @@ bootstrap().catch((e) => {
 });
 
 /* ---------- API ---------- */
-// GET /api/products
 app.get('/api/products', async (_req, res) => {
   try {
     const { rows } = await pool.query(
@@ -88,7 +87,6 @@ app.get('/api/products', async (_req, res) => {
   }
 });
 
-// GET /api/products/:id
 app.get('/api/products/:id', async (req, res) => {
   try {
     const { rows } = await pool.query(
@@ -103,7 +101,6 @@ app.get('/api/products/:id', async (req, res) => {
   }
 });
 
-// POST /api/products
 app.post('/api/products', async (req, res) => {
   try {
     const { name, category, quantity, price, description } = req.body;
@@ -121,7 +118,6 @@ app.post('/api/products', async (req, res) => {
   }
 });
 
-// PUT /api/products/:id
 app.put('/api/products/:id', async (req, res) => {
   try {
     const { name, category, quantity, price, description } = req.body;
@@ -140,7 +136,6 @@ app.put('/api/products/:id', async (req, res) => {
   }
 });
 
-// DELETE /api/products/:id
 app.delete('/api/products/:id', async (req, res) => {
   try {
     const { rowCount } = await pool.query(
@@ -155,7 +150,6 @@ app.delete('/api/products/:id', async (req, res) => {
   }
 });
 
-// GET /api/stats
 app.get('/api/stats', async (_req, res) => {
   try {
     const { rows } = await pool.query(
@@ -172,9 +166,9 @@ app.get('/api/stats', async (_req, res) => {
   }
 });
 
-/* ---------- Fallback SPA (no-API) ---------- */
-app.get('*', (req, res) => {
-  if (req.path.startsWith('/api/')) return res.status(404).end();
+/* ---------- Fallback SPA (sin usar '*') ---------- */
+/* Usa una regex que incluya TODO lo que NO empiece con /api/ */
+app.get(/^\/(?!api\/).*/, (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
@@ -182,7 +176,7 @@ app.get('*', (req, res) => {
 process.on('SIGTERM', () => pool.end().then(() => process.exit(0)));
 process.on('SIGINT', () => pool.end().then(() => process.exit(0)));
 
-/* ---------- Start --------- */
+/* ---------- Start ---------- */
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
