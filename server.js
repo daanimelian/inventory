@@ -17,7 +17,7 @@ const pool = new Pool({
   user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASS || '',
   database: process.env.DB_NAME || 'postgres',
-  // ssl: { rejectUnauthorized: false } // descomentar si tu RDS lo requiere
+  ssl: { rejectUnauthorized: false } // descomentar si tu RDS lo requiere
 });
 
 // --- Bootstrap DB: crear tabla y seed si no existen ---
