@@ -1,3 +1,4 @@
+// server.js
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
@@ -5,22 +6,38 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 80;
-// Middleware
+
+/* ---------- Middleware base ---------- */
+app.disable('etag'); // evita 304
+app.use((req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
 app.use(cors());
 app.use(express.json());
-app.use(express.static('public'));
 
-// --- PostgreSQL Pool ---
+/* ---------- Estáticos (front) ---------- */
+app.use(
+  express.static(path.join(__dirname, 'public'), {
+    etag: false,
+    lastModified: false,
+    cacheControl: false,
+    maxAge: 0,
+  })
+);
+
+/* ---------- PostgreSQL Pool (RDS) ---------- */
 const pool = new Pool({
   host: process.env.DB_HOST || '127.0.0.1',
   port: Number(process.env.DB_PORT) || 5432,
   user: process.env.DB_USER || 'postgres',
   password: process.env.DB_PASS || '',
   database: process.env.DB_NAME || 'postgres',
-  ssl: { rejectUnauthorized: false } // descomentar si tu RDS lo requiere
+  // RDS suele exigir TLS:
+  ssl: { rejectUnauthorized: false },
 });
 
-// --- Bootstrap DB: crear tabla y seed si no existen ---
+/* ---------- Bootstrap DB (tabla + seed) ---------- */
 async function bootstrap() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS products (
@@ -35,17 +52,16 @@ async function bootstrap() {
     )
   `);
 
-  // ¿Hay datos? Si no, insertar seed
-  const { rows: countRows } = await pool.query(`SELECT COUNT(*)::int AS c FROM products`);
-  if (countRows[0].c === 0) {
-    const sampleProducts = [
+  const { rows } = await pool.query(`SELECT COUNT(*)::int AS c FROM products`);
+  if (rows[0].c === 0) {
+    const sample = [
       ['Laptop Pro', 'Electronics', 15, 1299.99, 'High-performance laptop'],
       ['Wireless Mouse', 'Electronics', 45, 29.99, 'Ergonomic wireless mouse'],
       ['Office Chair', 'Furniture', 8, 199.99, 'Comfortable office chair'],
       ['Coffee Beans', 'Food', 120, 12.99, 'Premium coffee beans'],
       ['Notebook Set', 'Office Supplies', 200, 8.99, 'Pack of 3 notebooks'],
     ];
-    for (const p of sampleProducts) {
+    for (const p of sample) {
       await pool.query(
         `INSERT INTO products (name, category, quantity, price, description)
          VALUES ($1,$2,$3,$4,$5)`,
@@ -59,10 +75,9 @@ bootstrap().catch((e) => {
   process.exit(1);
 });
 
-// ---------------- API ----------------
-
+/* ---------- API ---------- */
 // GET /api/products
-app.get('/api/products', async (req, res) => {
+app.get('/api/products', async (_req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT * FROM products ORDER BY created_at DESC`
@@ -80,7 +95,8 @@ app.get('/api/products/:id', async (req, res) => {
       `SELECT * FROM products WHERE id = $1`,
       [req.params.id]
     );
-    if (rows.length === 0) return res.status(404).json({ error: 'Product not found' });
+    if (rows.length === 0)
+      return res.status(404).json({ error: 'Product not found' });
     res.json(rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -116,7 +132,8 @@ app.put('/api/products/:id', async (req, res) => {
        WHERE id=$6`,
       [name, category, quantity, price, description, req.params.id]
     );
-    if (rowCount === 0) return res.status(404).json({ error: 'Product not found' });
+    if (rowCount === 0)
+      return res.status(404).json({ error: 'Product not found' });
     res.json({ message: 'Product updated successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -130,7 +147,8 @@ app.delete('/api/products/:id', async (req, res) => {
       `DELETE FROM products WHERE id=$1`,
       [req.params.id]
     );
-    if (rowCount === 0) return res.status(404).json({ error: 'Product not found' });
+    if (rowCount === 0)
+      return res.status(404).json({ error: 'Product not found' });
     res.json({ message: 'Product deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -138,7 +156,7 @@ app.delete('/api/products/:id', async (req, res) => {
 });
 
 // GET /api/stats
-app.get('/api/stats', async (req, res) => {
+app.get('/api/stats', async (_req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT
@@ -154,10 +172,17 @@ app.get('/api/stats', async (req, res) => {
   }
 });
 
-// Graceful shutdown
-process.on('SIGTERM', () => pool.end().then(() => process.exit(0)));
-process.on('SIGINT',  () => pool.end().then(() => process.exit(0)));
+/* ---------- Fallback SPA (no-API) ---------- */
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api/')) return res.status(404).end();
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
+/* ---------- Shutdown ---------- */
+process.on('SIGTERM', () => pool.end().then(() => process.exit(0)));
+process.on('SIGINT', () => pool.end().then(() => process.exit(0)));
+
+/* ---------- Start --------- */
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
